@@ -23,7 +23,7 @@ class SupervisedTrainer(Trainer):
             ),
         ])
 
-        test_transform = transforms.Compose([
+        eval_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.4914, 0.4822, 0.4465],
@@ -31,29 +31,59 @@ class SupervisedTrainer(Trainer):
             ),
         ])
 
-        if self.dataset.lower() == "cifar":
-            full_trainset = datasets.CIFAR10(
-                root=self.data_dir,
-                train=True,
-                download=True,
-                transform=train_transform,
-            )
-            self.testset = datasets.CIFAR10(
-                root=self.data_dir,
-                train=False,
-                download=True,
-                transform=test_transform,
-            )
-        else:
+        if self.dataset.lower() != "cifar":
             raise ValueError("unsupported dataset, use cifar")
 
+        full_train_for_indices = datasets.CIFAR10(
+            root=self.data_dir,
+            train=True,
+            download=True,
+            transform=None,
+        )
+
+        full_train_train_tf = datasets.CIFAR10(
+            root=self.data_dir,
+            train=True,
+            download=True,
+            transform=train_transform,
+        )
+
+        full_train_eval_tf = datasets.CIFAR10(
+            root=self.data_dir,
+            train=True,
+            download=True,
+            transform=eval_transform,
+        )
+
+        self.testset = datasets.CIFAR10(
+            root=self.data_dir,
+            train=False,
+            download=True,
+            transform=eval_transform,
+        )
+
+        train_idx, val_idx = self._split_train_val(full_train_for_indices.targets, val_ratio=0.1)
+
         label_pct = self.config.data.label_pct
-        self.trainset = self._get_subset(full_trainset, label_pct)
+        labeled_train_idx = self._get_labeled_subset_indices(
+            np.array(full_train_for_indices.targets),
+            train_idx,
+            label_pct,
+        )
+
+        self.trainset = Subset(full_train_train_tf, labeled_train_idx)
+        self.valset = Subset(full_train_eval_tf, val_idx)
 
         self.train_loader = DataLoader(
             self.trainset,
             batch_size=self.batch_size,
             shuffle=True,
+            num_workers=self.num_workers,
+        )
+        self.val_loader = DataLoader(
+            self.valset,
+            batch_size=self.batch_size,
+            shuffle=False,
             num_workers=self.num_workers,
         )
         self.test_loader = DataLoader(
@@ -68,22 +98,40 @@ class SupervisedTrainer(Trainer):
         self.scheduler = self._init_scheduler()
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def _get_subset(self, dataset, pct):
+    def _split_train_val(self, targets, val_ratio=0.1):
         rng = np.random.default_rng(42)
-        targets = np.array(dataset.targets)
+        targets = np.array(targets)
 
-        indices = []
-        n_classes = 10
-        total_n = len(dataset)
-        per_class = max(1, int(total_n * pct / n_classes))
+        train_idx, val_idx = [], []
 
-        for c in range(n_classes):
+        for c in range(10):
             cls_idx = np.where(targets == c)[0]
-            chosen = rng.choice(cls_idx, per_class, replace=False)
+            rng.shuffle(cls_idx)
+
+            n_val = int(len(cls_idx) * val_ratio)
+            val_idx.extend(cls_idx[:n_val].tolist())
+            train_idx.extend(cls_idx[n_val:].tolist())
+
+        return train_idx, val_idx
+
+    def _get_labeled_subset_indices(self, targets, train_idx, pct):
+        rng = np.random.default_rng(42)
+        train_idx = np.array(train_idx)
+        indices = []
+
+        per_class_total = {}
+        for c in range(10):
+            cls_idx = train_idx[targets[train_idx] == c]
+            per_class_total[c] = len(cls_idx)
+
+        for c in range(10):
+            cls_idx = train_idx[targets[train_idx] == c]
+            n_select = max(1, int(len(cls_idx) * pct))
+            chosen = rng.choice(cls_idx, n_select, replace=False)
             indices.extend(chosen.tolist())
 
-        print(f"Using {int(pct*100)}% labeled data: {len(indices)} samples")
-        return Subset(dataset, indices)
+        print(f"Using {int(pct*100)}% labeled train data: {len(indices)} samples")
+        return indices
 
     @staticmethod
     def _build_model(cfg):
@@ -107,6 +155,8 @@ class SupervisedTrainer(Trainer):
 
     def train(self):
         start = time.time()
+        best_val_acc = -1.0
+        best_path = f"{self.output_dir}/best_supervised_{self.dataset.lower()}.pth"
 
         for epoch in range(self.config.train.n_epochs):
             self.net.train()
@@ -131,7 +181,12 @@ class SupervisedTrainer(Trainer):
                 acc_meter.update(acc, x.size(0))
 
             self.scheduler.step()
-            val_loss, val_acc = self.evaluate()
+
+            val_loss, val_acc = self.evaluate(self.val_loader)
+
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                self.save_model(self.net, best_path)
 
             print(
                 f"Epoch [{epoch+1}/{self.config.train.n_epochs}] "
@@ -141,15 +196,24 @@ class SupervisedTrainer(Trainer):
                 f"Val Acc {val_acc:.4f}"
             )
 
-        print(f"Completed in {(time.time() - start):.3f}s")
+        print(f"Training completed in {(time.time() - start):.3f}s")
 
-    def evaluate(self):
+        best_model = self.load_model(best_path, map_location=self.device)
+        best_model.to(self.device)
+        self.net = best_model
+
+        test_loss, test_acc = self.evaluate(self.test_loader)
+        print(f"Final Test Loss {test_loss:.4f}  Final Test Acc {test_acc:.4f}")
+
+        return test_loss, test_acc
+
+    def evaluate(self, loader):
         self.net.eval()
         loss_meter = AverageMeter()
         acc_meter = AverageMeter()
 
         with torch.no_grad():
-            for x, y in self.test_loader:
+            for x, y in loader:
                 x = x.to(self.device)
                 y = y.to(self.device)
 
