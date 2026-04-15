@@ -1,7 +1,7 @@
 import argparse
 import yaml
 
-from train.train_simclr import SimCLRTrainer
+#from train.train_simclr import SimCLRTrainer
 from train.train_supervised import SupervisedTrainer
 from utils.data_utils import Config
 
