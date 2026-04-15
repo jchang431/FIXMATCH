@@ -1,17 +1,39 @@
 from models.supervised import SupervisedModel
-from utils.train_utils import Trainer
-from utils.data_utils import AverageMeter
-
+from utils.data_utils import AverageMeter, set_seed, get_device
 import time
+import os
 import torch
 import numpy as np
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 
 
-class SupervisedTrainer(Trainer):
+class SupervisedTrainer:
     def __init__(self, config, checkpoint_dir=None, device=None):
-        super().__init__(config, output_dir=checkpoint_dir, device=device)
+
+        self.config = config
+        self.num_workers = self.config.train.num_workers
+        self.batch_size = self.config.train.batch_size
+        self.lr = self.config.train.lr
+        self.n_epochs = self.config.train.n_epochs
+        self.dataset = self.config.data.dataset
+    
+        set_seed(seed=42)
+    
+        if device is None:
+            self.device = get_device()
+        else:
+            self.device = device
+    
+        self.data_dir = "./data"
+        os.makedirs(self.data_dir, exist_ok=True)
+    
+        if checkpoint_dir is None:
+            self.output_dir = "./outputs/supervised"
+        else:
+            self.output_dir = checkpoint_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+
 
         train_transform = transforms.Compose([
             transforms.RandomHorizontalFlip(),
@@ -141,6 +163,17 @@ class SupervisedTrainer(Trainer):
 
     def _init_model(self):
         return self._build_model(self.config).to(self.device)
+    
+    @staticmethod
+    def save_model(model, model_path):
+        model_s = torch.jit.script(model)
+        model_s.save(model_path)
+        print(f"Model saved to {model_path}")
+    
+    @staticmethod
+    def load_model(model_path, map_location='cpu'):
+        model = torch.jit.load(model_path, map_location=map_location)
+        return model
 
     def _init_optimizer(self):
         return torch.optim.Adam(
@@ -154,6 +187,7 @@ class SupervisedTrainer(Trainer):
             self.optimizer,
             T_max=self.config.train.n_epochs,
         )
+        
 
     def train(self):
         pct = self.config.data.label_pct
