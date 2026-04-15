@@ -4,22 +4,22 @@ from utils.data_utils import AverageMeter
 
 import time
 import torch
+import numpy as np
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 
 class SupervisedTrainer(Trainer):
     def __init__(self, config, checkpoint_dir=None, device=None):
         super().__init__(config, output_dir=checkpoint_dir, device=device)
 
-        # overwrite SimCLR dataset with supervised dataset
         train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(size=32),
             transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32, padding=4),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.4914, 0.4822, 0.4465],
-                std=[0.2470, 0.2435, 0.2616],
+                std=[0.2023, 0.1994, 0.2010],
             ),
         ])
 
@@ -27,12 +27,12 @@ class SupervisedTrainer(Trainer):
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.4914, 0.4822, 0.4465],
-                std=[0.2470, 0.2435, 0.2616],
+                std=[0.2023, 0.1994, 0.2010],
             ),
         ])
 
         if self.dataset.lower() == "cifar":
-            self.trainset = datasets.CIFAR10(
+            full_trainset = datasets.CIFAR10(
                 root=self.data_dir,
                 train=True,
                 download=True,
@@ -46,6 +46,9 @@ class SupervisedTrainer(Trainer):
             )
         else:
             raise ValueError("unsupported dataset, use cifar")
+
+        label_pct = self.config.data.label_pct
+        self.trainset = self._get_subset(full_trainset, label_pct)
 
         self.train_loader = DataLoader(
             self.trainset,
@@ -65,13 +68,29 @@ class SupervisedTrainer(Trainer):
         self.scheduler = self._init_scheduler()
         self.criterion = torch.nn.CrossEntropyLoss()
 
+    def _get_subset(self, dataset, pct):
+        rng = np.random.default_rng(42)
+        targets = np.array(dataset.targets)
+
+        indices = []
+        n_classes = 10
+        total_n = len(dataset)
+        per_class = max(1, int(total_n * pct / n_classes))
+
+        for c in range(n_classes):
+            cls_idx = np.where(targets == c)[0]
+            chosen = rng.choice(cls_idx, per_class, replace=False)
+            indices.extend(chosen.tolist())
+
+        print(f"Using {int(pct*100)}% labeled data: {len(indices)} samples")
+        return Subset(dataset, indices)
+
     @staticmethod
     def _build_model(cfg):
         return SupervisedModel(cfg)
 
     def _init_model(self):
-        net = self._build_model(self.config).to(self.device)
-        return net
+        return self._build_model(self.config).to(self.device)
 
     def _init_optimizer(self):
         return torch.optim.Adam(
@@ -94,7 +113,7 @@ class SupervisedTrainer(Trainer):
             loss_meter = AverageMeter()
             acc_meter = AverageMeter()
 
-            for i, (x, y) in enumerate(self.train_loader):
+            for x, y in self.train_loader:
                 x = x.to(self.device)
                 y = y.to(self.device)
 
@@ -112,22 +131,17 @@ class SupervisedTrainer(Trainer):
                 acc_meter.update(acc, x.size(0))
 
             self.scheduler.step()
-
             val_loss, val_acc = self.evaluate()
 
             print(
-                f"Epoch: [{epoch+1}/{self.config.train.n_epochs}]\t"
-                f"Train Loss {loss_meter.avg:.4f}\t"
-                f"Train Acc {acc_meter.avg:.4f}\t"
-                f"Val Loss {val_loss:.4f}\t"
+                f"Epoch [{epoch+1}/{self.config.train.n_epochs}] "
+                f"Train Loss {loss_meter.avg:.4f} "
+                f"Train Acc {acc_meter.avg:.4f} "
+                f"Val Loss {val_loss:.4f} "
                 f"Val Acc {val_acc:.4f}"
             )
 
-        print(f"Completed in {(time.time() - start):.3f}")
-        self.save_model(
-            self.net,
-            f"{self.output_dir}/supervised_{self.dataset.lower()}.pth"
-        )
+        print(f"Completed in {(time.time() - start):.3f}s")
 
     def evaluate(self):
         self.net.eval()
