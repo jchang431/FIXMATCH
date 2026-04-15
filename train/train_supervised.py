@@ -34,13 +34,15 @@ class SupervisedTrainer(Trainer):
         if self.dataset.lower() != "cifar":
             raise ValueError("unsupported dataset, use cifar")
 
-        full_train_for_indices = datasets.CIFAR10(
+        # for indices only
+        full_train_plain = datasets.CIFAR10(
             root=self.data_dir,
             train=True,
             download=True,
             transform=None,
         )
 
+        # train split with augmentation
         full_train_train_tf = datasets.CIFAR10(
             root=self.data_dir,
             train=True,
@@ -48,6 +50,7 @@ class SupervisedTrainer(Trainer):
             transform=train_transform,
         )
 
+        # val split without augmentation
         full_train_eval_tf = datasets.CIFAR10(
             root=self.data_dir,
             train=True,
@@ -55,6 +58,7 @@ class SupervisedTrainer(Trainer):
             transform=eval_transform,
         )
 
+        # held-out test set
         self.testset = datasets.CIFAR10(
             root=self.data_dir,
             train=False,
@@ -62,11 +66,14 @@ class SupervisedTrainer(Trainer):
             transform=eval_transform,
         )
 
-        train_idx, val_idx = self._split_train_val(full_train_for_indices.targets, val_ratio=0.1)
+        train_idx, val_idx = self._split_train_val(
+            full_train_plain.targets,
+            val_ratio=0.1,
+        )
 
         label_pct = self.config.data.label_pct
         labeled_train_idx = self._get_labeled_subset_indices(
-            np.array(full_train_for_indices.targets),
+            np.array(full_train_plain.targets),
             train_idx,
             label_pct,
         )
@@ -117,21 +124,16 @@ class SupervisedTrainer(Trainer):
     def _get_labeled_subset_indices(self, targets, train_idx, pct):
         rng = np.random.default_rng(42)
         train_idx = np.array(train_idx)
-        indices = []
-
-        per_class_total = {}
-        for c in range(10):
-            cls_idx = train_idx[targets[train_idx] == c]
-            per_class_total[c] = len(cls_idx)
+        selected = []
 
         for c in range(10):
             cls_idx = train_idx[targets[train_idx] == c]
             n_select = max(1, int(len(cls_idx) * pct))
             chosen = rng.choice(cls_idx, n_select, replace=False)
-            indices.extend(chosen.tolist())
+            selected.extend(chosen.tolist())
 
-        print(f"Using {int(pct*100)}% labeled train data: {len(indices)} samples")
-        return indices
+        print(f"Using {int(pct * 100)}% labeled train data: {len(selected)} samples")
+        return selected
 
     @staticmethod
     def _build_model(cfg):
@@ -154,14 +156,21 @@ class SupervisedTrainer(Trainer):
         )
 
     def train(self):
-        start = time.time()
+        pct = self.config.data.label_pct
+
+        print(f"\n{'=' * 45}")
+        print(f"  {int(pct * 100)}% labeled")
+        print(f"{'=' * 45}")
+
         best_val_acc = -1.0
         best_path = f"{self.output_dir}/best_supervised_{self.dataset.lower()}.pth"
 
-        for epoch in range(self.config.train.n_epochs):
+        history = []
+        start = time.time()
+
+        for ep in range(1, self.config.train.n_epochs + 1):
             self.net.train()
-            loss_meter = AverageMeter()
-            acc_meter = AverageMeter()
+            train_loss_meter = AverageMeter()
 
             for x, y in self.train_loader:
                 x = x.to(self.device)
@@ -174,38 +183,38 @@ class SupervisedTrainer(Trainer):
                 loss.backward()
                 self.optimizer.step()
 
-                preds = torch.argmax(logits, dim=1)
-                acc = (preds == y).float().mean().item()
-
-                loss_meter.update(loss.item(), x.size(0))
-                acc_meter.update(acc, x.size(0))
+                train_loss_meter.update(loss.item(), x.size(0))
 
             self.scheduler.step()
 
             val_loss, val_acc = self.evaluate(self.val_loader)
+            history.append(val_acc)
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
                 self.save_model(self.net, best_path)
 
-            print(
-                f"Epoch [{epoch+1}/{self.config.train.n_epochs}] "
-                f"Train Loss {loss_meter.avg:.4f} "
-                f"Train Acc {acc_meter.avg:.4f} "
-                f"Val Loss {val_loss:.4f} "
-                f"Val Acc {val_acc:.4f}"
-            )
-
-        print(f"Training completed in {(time.time() - start):.3f}s")
+            if ep % 10 == 0 or ep == self.config.train.n_epochs:
+                elapsed = time.time() - start
+                print(
+                    f"  ep {ep:3d}/{self.config.train.n_epochs}  "
+                    f"train_loss={train_loss_meter.avg:.3f}  "
+                    f"val_loss={val_loss:.3f}  "
+                    f"val_acc={val_acc:.4f}  "
+                    f"({elapsed:.0f}s)"
+                )
 
         best_model = self.load_model(best_path, map_location=self.device)
         best_model.to(self.device)
         self.net = best_model
 
         test_loss, test_acc = self.evaluate(self.test_loader)
-        print(f"Final Test Loss {test_loss:.4f}  Final Test Acc {test_acc:.4f}")
+        per_class = self.evaluate_per_class(self.test_loader)
 
-        return test_loss, test_acc
+        print(f"\n  ★ Final test loss: {test_loss:.4f}")
+        print(f"  ★ Final test accuracy: {test_acc * 100:.2f}%")
+
+        return history, per_class, test_acc, self.net
 
     def evaluate(self, loader):
         self.net.eval()
@@ -227,3 +236,38 @@ class SupervisedTrainer(Trainer):
                 acc_meter.update(acc, x.size(0))
 
         return loss_meter.avg, acc_meter.avg
+
+    def evaluate_per_class(self, loader):
+        self.net.eval()
+
+        correct = [0 for _ in range(10)]
+        total = [0 for _ in range(10)]
+
+        class_names = [
+            "airplane", "automobile", "bird", "cat", "deer",
+            "dog", "frog", "horse", "ship", "truck"
+        ]
+
+        with torch.no_grad():
+            for x, y in loader:
+                x = x.to(self.device)
+                y = y.to(self.device)
+
+                logits = self.net(x)
+                preds = torch.argmax(logits, dim=1)
+
+                for label, pred in zip(y, preds):
+                    label = label.item()
+                    pred = pred.item()
+                    total[label] += 1
+                    if label == pred:
+                        correct[label] += 1
+
+        per_class = {}
+        for i, cls_name in enumerate(class_names):
+            if total[i] > 0:
+                per_class[cls_name] = correct[i] / total[i]
+            else:
+                per_class[cls_name] = 0.0
+
+        return per_class
