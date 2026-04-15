@@ -12,7 +12,6 @@ class Runner:
         self.device = args.device
         self.checkpoint_dir = args.checkpoint_dir
 
-        # config 로드
         if args.config:
             with open(args.config, "r") as f:
                 config_dict = yaml.safe_load(f)
@@ -24,7 +23,7 @@ class Runner:
         if self.mode == "pretrain":
             return self._run_simclr()
         elif self.mode == "supervised":
-            return self._run_supervised() # add supervised(baseline)
+            return self._run_supervised_loop()
         elif self.mode == "linear":
             return self._run_linear()
         elif self.mode == "inference":
@@ -41,14 +40,35 @@ class Runner:
         )
         trainer.train()
 
-    def _run_supervised(self):
-        print("Running Supervised baseline...")
-        trainer = SupervisedTrainer(
-            self.config,
-            checkpoint_dir=self.checkpoint_dir,
-            device=self.device,
-        )
-        trainer.train()
+    def _run_supervised_loop(self):
+        print("Running supervised baseline for multiple label portions...")
+
+        label_portions = [0.1, 0.25, 0.5, 1.0]
+        results = []
+
+        for pct in label_portions:
+            print("\n" + "=" * 60)
+            print(f"Running supervised baseline with {int(pct * 100)}% labeled data")
+            print("=" * 60)
+
+            self.config.data.label_pct = pct
+
+            trainer = SupervisedTrainer(
+                self.config,
+                checkpoint_dir=f"{self.checkpoint_dir}/supervised_{int(pct * 100)}pct",
+                device=self.device,
+            )
+
+            history, per_class, test_acc, model = trainer.train()
+            results.append((pct, test_acc, per_class))
+
+        print("\n" + "=" * 60)
+        print("Final Summary")
+        print("=" * 60)
+        for pct, test_acc, per_class in results:
+            print(f"{int(pct * 100)}% labeled data -> Test Acc: {test_acc:.4f}")
+
+        return results
 
     def _run_linear(self):
         print("Running linear evaluation...")
