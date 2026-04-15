@@ -1,6 +1,7 @@
 data:
   dataset: CIFAR
-  label_pct: 0.1 # 0.1, 0.25, 0.5, 1.0:label portion
+  label_pct: 0.1
+  num_classes: 10
 
 train:
   batch_size: 128
