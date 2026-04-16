@@ -111,7 +111,7 @@ def get_args():
         "-m",
         type=str,
         required=True,
-        choices=["pretrain", "supervised", "linear", "inference"],
+        choices=["pretrain", "linear", "inference", "supervised", "fixmatch"],
         help="Select training mode",
     )
 
