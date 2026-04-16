@@ -75,22 +75,22 @@ class Runner:
         return results
 
     def _run_fixmatch_loop(self):
-    print("Running FixMatch for multiple label portions...")
-
-    label_portions = [0.1, 0.25, 0.5, 1.0]
-    results = []
-
-    for pct in label_portions:
-        print("\n" + "=" * 60)
-        print(f"Running FixMatch with {int(pct * 100)}% labeled data")
-        print("=" * 60)
-
-        self.config.data.labeled_ratio = pct
-
-        train_fixmatch(self.config)
-        results.append(pct)
-
-    return results
+        print("Running FixMatch for multiple label portions...")
+    
+        label_portions = [0.1, 0.25, 0.5, 1.0]
+        results = []
+    
+        for pct in label_portions:
+            print("\n" + "=" * 60)
+            print(f"Running FixMatch with {int(pct * 100)}% labeled data")
+            print("=" * 60)
+    
+            self.config.data.labeled_ratio = pct
+    
+            train_fixmatch(self.config)
+            results.append(pct)
+    
+        return results
 
     def _run_linear(self):
         print("Running linear evaluation...")
