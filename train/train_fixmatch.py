@@ -1,10 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
 
-from fixmatch_dataset import build_fixmatch_datasets
-from fixmatch_loss import fixmatch_loss
-from model import FixMatchModel
-
+from dataset.fixmatch_dataset import build_fixmatch_datasets
+from models.losses.fixmatch_loss import fixmatch_loss
+from models.fixmatch import FixMatchModel
 
 def evaluate(model, loader, device):
     model.eval()
