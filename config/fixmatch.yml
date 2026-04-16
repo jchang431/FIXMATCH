@@ -1,14 +1,19 @@
+seed: 42
+
 data:
-  dataset: cifar10
-  labeled_ratio: 0.1   # 0.1, 0.25, 0.5, 1.0
+  labeled_ratio: 0.1   # 0.1 / 0.25 / 0.5 / 1.0
+  val_ratio: 0.1
+
+dataset:
+  num_classes: 10
 
 train:
   batch_size: 64
-  mu: 7 # unlabeled data//labeled data
+  mu: 7
   epochs: 50
   lr: 0.03
   num_workers: 2
 
 fixmatch:
   threshold: 0.95
-  lambda_u: 1.0 # unlabeled loss ratio
+  lambda_u: 1.0
