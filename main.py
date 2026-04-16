@@ -4,6 +4,7 @@ import yaml
 #from train.train_simclr import SimCLRTrainer
 from train.train_supervised import SupervisedTrainer
 from utils.data_utils import Config
+from train.train_fixmatch import train_fixmatch
 
 
 class Runner:
@@ -24,10 +25,13 @@ class Runner:
             return self._run_simclr()
         elif self.mode == "supervised":
             return self._run_supervised_loop()
+        elif self.mode == "fixmatch":
+            return self._run_fixmatch_loop()
         elif self.mode == "linear":
             return self._run_linear()
         elif self.mode == "inference":
             return self._run_inference()
+        
         else:
             raise ValueError("Invalid mode")
 
@@ -69,6 +73,24 @@ class Runner:
             print(f"{int(pct * 100)}% labeled data -> Test Acc: {test_acc:.4f}")
 
         return results
+
+    def _run_fixmatch_loop(self):
+    print("Running FixMatch for multiple label portions...")
+
+    label_portions = [0.1, 0.25, 0.5, 1.0]
+    results = []
+
+    for pct in label_portions:
+        print("\n" + "=" * 60)
+        print(f"Running FixMatch with {int(pct * 100)}% labeled data")
+        print("=" * 60)
+
+        self.config.data.labeled_ratio = pct
+
+        train_fixmatch(self.config)
+        results.append(pct)
+
+    return results
 
     def _run_linear(self):
         print("Running linear evaluation...")
