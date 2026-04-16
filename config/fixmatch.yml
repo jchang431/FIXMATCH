@@ -1,0 +1,14 @@
+data:
+  dataset: cifar10
+  labeled_ratio: 0.1   # 0.1, 0.25, 0.5, 1.0
+
+train:
+  batch_size: 64
+  mu: 7 # unlabeled data//labeled data
+  epochs: 50
+  lr: 0.03
+  num_workers: 2
+
+fixmatch:
+  threshold: 0.95
+  lambda_u: 1.0 # unlabeled loss ratio
