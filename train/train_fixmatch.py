@@ -22,17 +22,53 @@ def evaluate(model, loader, device):
 
     return correct / total
 
+def evaluate_per_class(model, loader, device):
+    model.eval()
+
+    correct = [0 for _ in range(10)]
+    total = [0 for _ in range(10)]
+
+    class_names = [
+        "airplane", "automobile", "bird", "cat", "deer",
+        "dog", "frog", "horse", "ship", "truck"
+    ]
+
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            y = y.to(device)
+
+            logits = model(x)
+            preds = logits.argmax(dim=1)
+
+            for label, pred in zip(y, preds):
+                label = label.item()
+                pred = pred.item()
+
+                total[label] += 1
+                if label == pred:
+                    correct[label] += 1
+
+    per_class = {}
+    for i, cls_name in enumerate(class_names):
+        if total[i] > 0:
+            per_class[cls_name] = correct[i] / total[i]
+        else:
+            per_class[cls_name] = 0.0
+
+    return per_class
 
 def train_fixmatch(cfg):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # make train data sets(labled and unlabeled), val data sets and test_datasets
     train_labeled_dataset, train_unlabeled_dataset, val_dataset, test_dataset = build_fixmatch_datasets(
         root="./data",
         labeled_ratio=cfg.data.labeled_ratio,
         val_ratio=cfg.data.val_ratio,
         seed=cfg.seed,
     )
-
+    # train, labeled
     labeled_loader = DataLoader(
         train_labeled_dataset,
         batch_size=cfg.train.batch_size,
@@ -40,7 +76,7 @@ def train_fixmatch(cfg):
         num_workers=cfg.train.num_workers,
         drop_last=True,
     )
-
+    # train, unlabeled
     unlabeled_loader = DataLoader(
         train_unlabeled_dataset,
         batch_size=cfg.train.batch_size * cfg.train.mu,
@@ -48,14 +84,14 @@ def train_fixmatch(cfg):
         num_workers=cfg.train.num_workers,
         drop_last=True,
     )
-
+    # val datasets
     val_loader = DataLoader(
         val_dataset,
         batch_size=256,
         shuffle=False,
         num_workers=cfg.train.num_workers,
     )
-
+    # test datasets
     test_loader = DataLoader(
         test_dataset,
         batch_size=256,
@@ -78,6 +114,8 @@ def train_fixmatch(cfg):
     )
 
     best_val_acc = 0.0
+    history = []
+    best_model_path = f"best_fixmatch_{int(cfg.data.labeled_ratio * 100)}pct.pt"
 
     for epoch in range(cfg.train.epochs):
         model.train()
@@ -86,6 +124,11 @@ def train_fixmatch(cfg):
         unlabeled_iter = iter(unlabeled_loader)
 
         steps_per_epoch = max(len(labeled_loader), len(unlabeled_loader))
+
+        epoch_loss = 0.0
+        epoch_loss_x = 0.0
+        epoch_loss_u = 0.0
+        epoch_mask = 0.0
 
         for step in range(steps_per_epoch):
             try:
@@ -121,24 +164,46 @@ def train_fixmatch(cfg):
             loss.backward()
             optimizer.step()
 
+            epoch_loss += out["loss"].item()
+            epoch_loss_x += out["loss_x"].item()
+            epoch_loss_u += out["loss_u"].item()
+            epoch_mask += out["mask"].item()
+
         scheduler.step()
 
+        epoch_loss /= steps_per_epoch
+        epoch_loss_x /= steps_per_epoch
+        epoch_loss_u /= steps_per_epoch
+        epoch_mask /= steps_per_epoch
+
         val_acc = evaluate(model, val_loader, device)
+        history.append(val_acc)
 
         print(
             f"Epoch [{epoch+1}/{cfg.train.epochs}] "
-            f"loss={out['loss'].item():.4f}, "
-            f"loss_x={out['loss_x'].item():.4f}, "
-            f"loss_u={out['loss_u'].item():.4f}, "
-            f"mask={out['mask'].item():.4f}, "
+            f"loss={epoch_loss:.4f}, "
+            f"loss_x={epoch_loss_x:.4f}, "
+            f"loss_u={epoch_loss_u:.4f}, "
+            f"mask={epoch_mask:.4f}, "
             f"val_acc={val_acc:.4f}"
         )
 
+
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), "best_fixmatch.pt")
+            torch.save(model.state_dict(), best_model_path)
 
-    model.load_state_dict(torch.load("best_fixmatch.pt"))
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+    model.to(device)
+
     test_acc = evaluate(model, test_loader, device)
+    per_class = evaluate_per_class(model, test_loader, device)
+
     print(f"Best val acc: {best_val_acc:.4f}")
     print(f"Test acc: {test_acc:.4f}")
+
+    print("\nPer-class accuracy:")
+    for cls_name, acc in per_class.items():
+        print(f"  {cls_name:12s}: {acc * 100:.2f}%")
+
+    return history, per_class, test_acc, model
