@@ -97,7 +97,7 @@ class Runner:
         return results
 
     def _run_fixmatch_once(self):
-        pct = self.config.data.labeled_ratio
+        pct = self.config.data.label_pct
     
         print("\n" + "=" * 60)
         print(f"Running FixMatch with {int(pct * 100)}% labeled data")
@@ -120,9 +120,15 @@ class Runner:
         results = []
     
         for pct in label_portions:
-            self.config.data.labeled_ratio = pct
+            self.config.data.label_pct = pct
             result = self._run_fixmatch_once()
             results.append(result)
+    
+        print("\n" + "=" * 60)
+        print("Final Summary")
+        print("=" * 60)
+        for result in results:
+            print(f"{int(result['label_pct'] * 100)}% labeled data -> Test Acc: {result['test_acc']:.4f}")
     
         return results
 
