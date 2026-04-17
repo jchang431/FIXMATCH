@@ -1,12 +1,15 @@
+seed: 42
+
 data:
   dataset: CIFAR
   label_pct: 0.1
+  val_ratio: 0.1    
   num_classes: 10
 
 train:
   batch_size: 128
-  lr: 0.0003
-  n_epochs: 16
+  lr: 0.001
+  n_epochs: 100
   num_workers: 4
 
 optimizer:
