@@ -1,7 +1,7 @@
 seed: 42
 
 data:
-  labeled_ratio: 0.1   # 0.1 / 0.25 / 0.5 / 1.0
+  label_pct: 0.1   # 0.1 / 0.25 / 0.5 / 1.0
   val_ratio: 0.1
 
 dataset:
@@ -12,7 +12,7 @@ train:
   mu: 7
   epochs: 50
   lr: 0.03
-  num_workers: 2
+  num_workers: 4
 
 fixmatch:
   threshold: 0.95
