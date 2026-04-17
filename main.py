@@ -192,4 +192,10 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     runner = Runner(args)
-    runner.run()
+
+    results = runner.run()   
+
+    if isinstance(results, list):   # only for loop
+        print("\n=== Summary ===")
+        for r in results:
+            print(f"{int(r['label_pct'] * 100)}% -> {r['test_acc']:.4f}")
