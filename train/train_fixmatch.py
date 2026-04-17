@@ -64,7 +64,7 @@ def train_fixmatch(cfg):
     # make train data sets(labled and unlabeled), val data sets and test_datasets
     train_labeled_dataset, train_unlabeled_dataset, val_dataset, test_dataset = build_fixmatch_datasets(
         root="./data",
-        labeled_ratio=cfg.data.labeled_ratio,
+        labeled_ratio=cfg.data.label_pct,
         val_ratio=cfg.data.val_ratio,
         seed=cfg.seed,
     )
@@ -115,7 +115,7 @@ def train_fixmatch(cfg):
 
     best_val_acc = 0.0
     history = []
-    best_model_path = f"best_fixmatch_{int(cfg.data.labeled_ratio * 100)}pct.pt"
+    best_model_path = f"best_fixmatch_{int(cfg.data.label_pct * 100)}pct.pt"
 
     for epoch in range(cfg.train.epochs):
         model.train()
