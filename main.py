@@ -23,10 +23,14 @@ class Runner:
     def run(self):
         if self.mode == "pretrain":
             return self._run_simclr()
-        elif self.mode == "supervised":
+        elif self.mode == "supervised_loop":
             return self._run_supervised_loop()
-        elif self.mode == "fixmatch":
+        elif self.mode == "fixmatch_loop":
             return self._run_fixmatch_loop()
+        elif self.mode == "supervised":
+            return self._run_supervised()
+        elif self.mode == "fixmatch":
+            return self._run_fixmatch()
         elif self.mode == "linear":
             return self._run_linear()
         elif self.mode == "inference":
@@ -111,7 +115,13 @@ def get_args():
         "-m",
         type=str,
         required=True,
-        choices=["pretrain", "linear", "inference", "supervised", "fixmatch"],
+        choices=["pretrain", 
+                 "linear", 
+                 "inference", 
+                 "supervised", 
+                 "fixmatch",
+                 "supervised_loop",
+                 "fixmatch_loop"],
         help="Select training mode",
     )
 
