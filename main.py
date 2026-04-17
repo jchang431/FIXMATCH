@@ -28,9 +28,9 @@ class Runner:
         elif self.mode == "fixmatch_loop":
             return self._run_fixmatch_loop()
         elif self.mode == "supervised":
-            return self._run_supervised()
+            return self._run_supervised_once()
         elif self.mode == "fixmatch":
-            return self._run_fixmatch()
+            return self._run_fixmatch_once()
         elif self.mode == "linear":
             return self._run_linear()
         elif self.mode == "inference":
@@ -48,36 +48,71 @@ class Runner:
         )
         trainer.train()
 
+    def _run_supervised_once(self):
+        pct = self.config.data.label_pct
+
+        print("\n" + "=" * 60)
+        print(f"Running supervised baseline with {int(pct * 100)}% labeled data")
+        print("=" * 60)
+
+        trainer = SupervisedTrainer(
+            self.config,
+            checkpoint_dir=f"{self.checkpoint_dir}/supervised_{int(pct * 100)}pct",
+            device=self.device,
+        )
+
+        history, per_class, test_acc, model = trainer.train()
+
+        print("\nPer-class accuracy:")
+        for cls_name, acc in per_class.items():
+            print(f"  {cls_name:12s}: {acc * 100:.2f}%")
+
+        print(f"\nTest Acc: {test_acc * 100:.2f}%")
+
+        return {
+            "label_pct": pct,
+            "history": history,
+            "per_class": per_class,
+            "test_acc": test_acc,
+            "model": model,
+        }
+    
     def _run_supervised_loop(self):
         print("Running supervised baseline for multiple label portions...")
-
+    
         label_portions = [0.1, 0.25, 0.5, 1.0]
         results = []
-
+    
         for pct in label_portions:
-            print("\n" + "=" * 60)
-            print(f"Running supervised baseline with {int(pct * 100)}% labeled data")
-            print("=" * 60)
-
             self.config.data.label_pct = pct
-
-            trainer = SupervisedTrainer(
-                self.config,
-                checkpoint_dir=f"{self.checkpoint_dir}/supervised_{int(pct * 100)}pct",
-                device=self.device,
-            )
-
-            history, per_class, test_acc, model = trainer.train()
-            results.append((pct, test_acc, per_class))
-
+            result = self._run_supervised_once()
+            results.append(result)
+    
         print("\n" + "=" * 60)
         print("Final Summary")
         print("=" * 60)
-        for pct, test_acc, per_class in results:
-            print(f"{int(pct * 100)}% labeled data -> Test Acc: {test_acc:.4f}")
-
+        for result in results:
+            print(f"{int(result['label_pct'] * 100)}% labeled data -> Test Acc: {result['test_acc']:.4f}")
+    
         return results
 
+    def _run_fixmatch_once(self):
+        pct = self.config.data.labeled_ratio
+    
+        print("\n" + "=" * 60)
+        print(f"Running FixMatch with {int(pct * 100)}% labeled data")
+        print("=" * 60)
+    
+        history, per_class, test_acc, model = train_fixmatch(self.config)
+    
+        return {
+            "label_pct": pct,
+            "history": history,
+            "per_class": per_class,
+            "test_acc": test_acc,
+            "model": model,
+        }
+    
     def _run_fixmatch_loop(self):
         print("Running FixMatch for multiple label portions...")
     
@@ -85,14 +120,9 @@ class Runner:
         results = []
     
         for pct in label_portions:
-            print("\n" + "=" * 60)
-            print(f"Running FixMatch with {int(pct * 100)}% labeled data")
-            print("=" * 60)
-    
             self.config.data.labeled_ratio = pct
-    
-            train_fixmatch(self.config)
-            results.append(pct)
+            result = self._run_fixmatch_once()
+            results.append(result)
     
         return results
 
