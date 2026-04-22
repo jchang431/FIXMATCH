@@ -95,31 +95,33 @@ class SupervisedTrainer:
         return model
 
     def _init_optimizer(self):
-        opt_type = getattr(self.config.optimizer, "type", "adam").lower()
-        print("optimizer type:", opt_type)
+        
+        cfg = self.config
+        model = self.net
+        opt_type = cfg.optimizer.type.lower()
 
-        if opt_type == "adam":
-            return torch.optim.Adam(
-                self.net.parameters(),
-                lr=self.config.train.lr,
-                weight_decay=self.config.optimizer.weight_decay,
+        if opt_type == "sgd":
+            optimizer = torch.optim.SGD(
+                model.parameters(),
+                lr=cfg.train.lr,
+                momentum=cfg.optimizer.momentum,
+                weight_decay=cfg.optimizer.weight_decay,
+                nesterov=cfg.optimizer.nesterov,
             )
 
-        elif opt_type == "sgd":
-            momentum = getattr(self.config.optimizer, "momentum", 0.9)
-            nesterov = getattr(self.config.optimizer, "nesterov", True)
-
-            return torch.optim.SGD(
-                self.net.parameters(),
-                lr=self.config.train.lr,
-                momentum=momentum,
-                nesterov=nesterov,
-                weight_decay=self.config.optimizer.weight_decay,
+        elif opt_type == "adamw":
+            optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=cfg.train.lr,
+                weight_decay=cfg.optimizer.weight_decay,
+                betas=tuple(cfg.optimizer.betas),
             )
 
         else:
-            raise ValueError(f"Unsupported optimizer: {opt_type}")
+            raise ValueError(f"Unknown optimizer: {cfg.optimizer.type}")
 
+        return optimizer
+        
     def _init_scheduler(self):
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer,
