@@ -3,9 +3,9 @@ seed: 42
 data:
   dataset: CIFAR
   label_pct: 0.1
-  val_ratio: 0.1    
+  val_ratio: 0.1
   num_classes: 10
-  use_randaugment: true #if it is true, supervised(RA)
+  use_randaugment: true   # if true, supervised with RandAugment
 
 train:
   batch_size: 64
@@ -14,7 +14,12 @@ train:
   num_workers: 4
 
 optimizer:
-  type: adam
-  weight_decay: 0.0001
+  type: adamw # adamw / sgd
+  weight_decay: 0.0005
+
+  # for SGD
   momentum: 0.9
   nesterov: true
+
+  # for AdamW
+  betas: [0.9, 0.999]
