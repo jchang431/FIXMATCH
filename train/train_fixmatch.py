@@ -4,8 +4,10 @@ from torch.utils.data import DataLoader
 from dataset.fixmatch_dataset import build_fixmatch_datasets
 from models.losses.fixmatch_loss import fixmatch_loss
 from models.fixmatch import FixMatchModel
+from utils.ema import ModelEMA
 
 def evaluate(model, loader, device):
+    
     model.eval()
     correct, total = 0, 0
 
@@ -23,6 +25,7 @@ def evaluate(model, loader, device):
     return correct / total
 
 def evaluate_per_class(model, loader, device):
+    
     model.eval()
 
     correct = [0 for _ in range(10)]
@@ -59,6 +62,7 @@ def evaluate_per_class(model, loader, device):
     return per_class
 
 def train_fixmatch(cfg):
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # make train data sets(labled and unlabeled), val data sets and test_datasets
@@ -101,13 +105,32 @@ def train_fixmatch(cfg):
 
     model = FixMatchModel(cfg).to(device)
 
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=cfg.train.lr,
-        momentum=0.9,
-        weight_decay=0.0005,
-        nesterov=True,
-    )
+    if cfg.ema.use:
+        ema_model = ModelEMA(model, decay=cfg.ema.decay)
+    else:
+        ema_model = None
+
+    opt_type = cfg.optimizer.type.lower()
+
+    if opt_type == "sgd":
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=cfg.train.lr,
+            momentum=cfg.optimizer.momentum,
+            weight_decay=cfg.optimizer.weight_decay,
+            nesterov=cfg.optimizer.nesterov,
+        )
+
+    elif opt_type == "adamw":
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=cfg.train.lr,
+            weight_decay=cfg.optimizer.weight_decay,
+            betas=tuple(cfg.optimizer.betas),
+        )
+
+    else:
+        raise ValueError(f"Unknown optimizer: {cfg.optimizer.type}")
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cfg.train.epochs
@@ -164,6 +187,9 @@ def train_fixmatch(cfg):
             loss.backward()
             optimizer.step()
 
+            if ema_model is not None:
+              ema_model.update(model)
+
             epoch_loss += out["loss"].item()
             epoch_loss_x += out["loss_x"].item()
             epoch_loss_u += out["loss_u"].item()
@@ -176,7 +202,8 @@ def train_fixmatch(cfg):
         epoch_loss_u /= steps_per_epoch
         epoch_mask /= steps_per_epoch
 
-        val_acc = evaluate(model, val_loader, device)
+        eval_model = ema_model.ema if ema_model is not None else model
+        val_acc = evaluate(eval_model, val_loader, device)
         history.append(val_acc)
 
         print(
@@ -191,7 +218,8 @@ def train_fixmatch(cfg):
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), best_model_path)
+            save_model = ema_model.ema if ema_model is not None else model
+            torch.save(save_model.state_dict(), best_model_path)
 
     model.load_state_dict(torch.load(best_model_path, map_location=device))
     model.to(device)
