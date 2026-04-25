@@ -1,0 +1,42 @@
+seed: 42
+
+data:
+  label_pct: 0.1   # 0.1 / 0.25 / 0.5 / 1.0
+  val_ratio: 0.1
+  split_path: "splits/cifar10_split_0p1_seed42.npz"
+
+dataset:
+  num_classes: 10
+
+model:
+  name: resent18 # resnet18 or wideresnet
+  depth: 28
+  widen_factor: 2
+  drop_rate: 0.0
+
+train:
+  batch_size: 64
+  mu: 7
+  epochs: 300
+  lr: 0.03
+  num_workers: 4
+
+optimizer:
+  type: sgd
+  weight_decay: 0.0005
+  momentum: 0.9
+  nesterov: true
+
+  #only for adamw
+  betas: [0.9, 0.999]
+
+fixmatch:
+  threshold: 0.95
+  lambda_u: 1.0
+  ra_num_ops: 2
+  ra_magnitude: 15
+  use_cutout: true
+
+ema:
+  use: false    
+  decay: 0.9

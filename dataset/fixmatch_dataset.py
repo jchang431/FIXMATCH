@@ -23,7 +23,14 @@ CIFAR10_STD = (0.2471, 0.2435, 0.2616)
 # Transform # code credit: https://github.com/google-research/fixmatch for Augmentation Descriptioon
 
 class TransformFixMatch:
-    def __init__(self, mean=CIFAR10_MEAN, std=CIFAR10_STD):
+    def __init__(
+        self,
+        mean=CIFAR10_MEAN,
+        std=CIFAR10_STD,
+        ra_num_ops=2,
+        ra_magnitude=10,
+        use_cutout=True,
+    ):
         self.weak = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
@@ -32,7 +39,7 @@ class TransformFixMatch:
         self.strong = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
-            transforms.RandAugment(num_ops=2, magnitude=10),
+            transforms.RandAugment(num_ops=ra_num_ops, magnitude=ra_magnitude),
         ])
 
         self.normalize = transforms.Compose([
@@ -40,12 +47,14 @@ class TransformFixMatch:
             transforms.Normalize(mean, std),
         ])
 
-        self.cutout = transforms.RandomErasing(
-            p=1.0,
-            scale=(0.02, 0.2),
-            ratio=(0.3, 3.3),
-            value="random",
-        )
+        self.use_cutout = use_cutout
+        if self.use_cutout:
+            self.cutout = transforms.RandomErasing(
+                p=1.0,
+                scale=(0.02, 0.2),
+                ratio=(0.3, 3.3),
+                value="random",
+            )
 
     def __call__(self, img):
         weak = self.weak(img)
@@ -53,10 +62,11 @@ class TransformFixMatch:
 
         weak = self.normalize(weak)
         strong = self.normalize(strong)
-        strong = self.cutout(strong)
+
+        if self.use_cutout:
+            strong = self.cutout(strong)
 
         return weak, strong
-
 
 def get_labeled_transform():
     return transforms.Compose([
@@ -141,15 +151,16 @@ class LabeledDataset(Dataset):
 class UnlabeledDataset(Dataset):
     def __init__(self, base_dataset, indices, transform=None):
         self.data = base_dataset.data[indices]
+        self.targets = np.array(base_dataset.targets)[indices].tolist()
         self.transform = transform if transform is not None else TransformFixMatch()
+
+    def __len__(self):
+        return len(self.data)
 
     def __getitem__(self, index):
         img = Image.fromarray(self.data[index])
         weak, strong = self.transform(img)
         return weak, strong
-
-    def __len__(self):
-        return len(self.data)
 
 
 def build_fixmatch_datasets(
@@ -159,6 +170,9 @@ def build_fixmatch_datasets(
     seed=42,
     download=True,
     split_path=None,
+    ra_num_ops=2,
+    ra_magnitude=10,
+    use_cutout=True,
 ):
     full_train = datasets.CIFAR10(
         root=root, train=True, download=download, transform=None,
@@ -200,7 +214,13 @@ def build_fixmatch_datasets(
         base_dataset=full_train, indices=labeled_indices,
     )
     train_unlabeled_dataset = UnlabeledDataset(
-        base_dataset=full_train, indices=unlabeled_indices,
+        base_dataset=full_train,
+        indices=unlabeled_indices,
+        transform=TransformFixMatch(
+            ra_num_ops=ra_num_ops,
+            ra_magnitude=ra_magnitude,
+            use_cutout=use_cutout,
+        ),
     )
     val_dataset = LabeledDataset(
         base_dataset=full_train, indices=val_indices,

@@ -72,6 +72,9 @@ def train_fixmatch(cfg):
         val_ratio=cfg.data.val_ratio,
         seed=cfg.seed,
         split_path=getattr(cfg.data, "split_path", None),
+        ra_num_ops=getattr(cfg.fixmatch, "ra_num_ops", 2),
+        ra_magnitude=getattr(cfg.fixmatch, "ra_magnitude", 10),
+        use_cutout=getattr(cfg.fixmatch, "use_cutout", True),
     )
     # train, labeled
     labeled_loader = DataLoader(
