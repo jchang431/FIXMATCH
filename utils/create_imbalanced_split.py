@@ -63,7 +63,15 @@ def make_lt_by_difficulty(
     rng.shuffle(unlabeled)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    np.savez(out_path, labeled=labeled, unlabeled=unlabeled, val=val_idx)
+    np.savez(
+        out_path,
+        labeled=labeled,
+        unlabeled=unlabeled,
+        val=val_idx,
+        labeled_idx=labeled,
+        unlabeled_idx=unlabeled,
+        val_idx=val_idx,
+    )
 
     print(f"Saved: {out_path}")
     print(f"Labeled: {len(labeled)}, Unlabeled: {len(unlabeled)}, Val: {len(val_idx)}")
@@ -104,7 +112,15 @@ def make_lt_standard(
     rng.shuffle(unlabeled)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    np.savez(out_path, labeled=labeled, unlabeled=unlabeled, val=val_idx)
+    np.savez(
+        out_path,
+        labeled=labeled,
+        unlabeled=unlabeled,
+        val=val_idx,
+        labeled_idx=labeled,
+        unlabeled_idx=unlabeled,
+        val_idx=val_idx,
+    )
 
     print(f"Saved: {out_path}")
     print(f"Labeled: {len(labeled)}, Unlabeled: {len(unlabeled)}, Val: {len(val_idx)}")
@@ -152,7 +168,15 @@ def make_lt_by_difficulty_1pct(
     rng.shuffle(unlabeled)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    np.savez(out_path, labeled=labeled, unlabeled=unlabeled, val=val_idx)
+    np.savez(
+        out_path,
+        labeled=labeled,
+        unlabeled=unlabeled,
+        val=val_idx,
+        labeled_idx=labeled,
+        unlabeled_idx=unlabeled,
+        val_idx=val_idx,
+    )
 
     print(f"Saved: {out_path}")
     print(f"Labeled: {len(labeled)}, Unlabeled: {len(unlabeled)}, Val: {len(val_idx)}")
