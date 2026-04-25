@@ -112,7 +112,62 @@ def make_lt_standard(
         print(f"  class {c} ({CLASS_NAMES[c]}): {counts[c]}")
     print()
 
+def make_lt_by_difficulty_1pct(
+    root="./data",
+    out_path="splits/cifar10_imb_difficulty_1pct_seed42.npz",
+    val_ratio=0.1,
+    seed=42,
+):
+    rng = np.random.RandomState(seed)
+    dataset = datasets.CIFAR10(root=root, train=True, download=False, transform=None)
+    targets = np.array(dataset.targets)
+
+    train_idx, val_idx = _split_train_val(targets, val_ratio, seed)
+    train_targets = targets[train_idx]
+
+    counts = {
+        3: 70,  # cat
+        5: 70,  # dog
+        2: 70,  # bird
+        4: 40,  # deer
+        7: 40,  # horse
+        0: 40,  # airplane
+        6: 40,  # frog
+        8: 27,  # ship
+        9: 27,  # truck
+        1: 26,  # automobile
+    }
+
+    labeled, unlabeled = [], []
+    for c in range(10):
+        local = np.where(train_targets == c)[0]
+        rng.shuffle(local)
+        n = min(counts[c], len(local))
+        labeled.extend(train_idx[local[:n]])
+        unlabeled.extend(train_idx[local[n:]])
+
+    labeled = np.array(labeled)
+    unlabeled = np.array(unlabeled)
+    rng.shuffle(labeled)
+    rng.shuffle(unlabeled)
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    np.savez(out_path, labeled=labeled, unlabeled=unlabeled, val=val_idx)
+
+    print(f"Saved: {out_path}")
+    print(f"Labeled: {len(labeled)}, Unlabeled: {len(unlabeled)}, Val: {len(val_idx)}")
+    for c in range(10):
+        print(f"  class {c} ({CLASS_NAMES[c]}): {counts[c]}")
+    print()
 
 if __name__ == "__main__":
+    # 10% imbalance splits
     make_lt_by_difficulty()
     make_lt_standard()
+
+    # 1% imbalance splits
+    make_lt_by_difficulty_1pct()
+    make_lt_standard(
+        out_path="splits/cifar10_imb_lt_if10_1pct_seed42.npz",
+        head_count=110,
+    )
