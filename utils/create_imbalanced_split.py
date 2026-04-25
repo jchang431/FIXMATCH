@@ -195,3 +195,8 @@ if __name__ == "__main__":
         out_path="splits/cifar10_imb_lt_if10_1pct_seed42.npz",
         head_count=110,
     )
+    make_lt_standard(
+        out_path="splits/cifar10_imb_lt_if50_seed42.npz",
+        imb_factor=50,
+        head_count=1600,
+    )
