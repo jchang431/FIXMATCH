@@ -71,6 +71,7 @@ def train_fixmatch(cfg):
         labeled_ratio=cfg.data.label_pct,
         val_ratio=cfg.data.val_ratio,
         seed=cfg.seed,
+        split_path=getattr(cfg.data, "split_path", None),
     )
     # train, labeled
     labeled_loader = DataLoader(

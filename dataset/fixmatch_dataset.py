@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from PIL import Image
 
@@ -157,52 +158,52 @@ def build_fixmatch_datasets(
     val_ratio=0.1,
     seed=42,
     download=True,
+    split_path=None,
 ):
     full_train = datasets.CIFAR10(
-        root=root,
-        train=True,
-        download=download,
-        transform=None,
+        root=root, train=True, download=download, transform=None,
     )
-
     test_dataset = datasets.CIFAR10(
-        root=root,
-        train=False,
-        download=download,
+        root=root, train=False, download=download,
         transform=get_eval_transform(),
     )
 
-    train_indices, val_indices = split_train_val_indices(
-        num_samples=len(full_train),
-        val_ratio=val_ratio,
-        seed=seed,
-    )
+    if split_path is not None:
+        if not os.path.exists(split_path):
+            raise FileNotFoundError(f"Split file not found: {split_path}")
 
-    train_labels = np.array(full_train.targets)[train_indices]
+        print(f"Loading split from: {split_path}")
+        split = np.load(split_path)
+        labeled_indices = split["labeled"].astype(int)
+        unlabeled_indices = split["unlabeled"].astype(int)
+        val_indices = split["val"].astype(int)
+    else:
+        train_indices, val_indices = split_train_val_indices(
+            num_samples=len(full_train),
+            val_ratio=val_ratio,
+            seed=seed,
+        )
+        train_labels = np.array(full_train.targets)[train_indices]
 
-    labeled_local_idx, unlabeled_local_idx = split_labeled_unlabeled(
-        labels=train_labels,
-        labeled_ratio=labeled_ratio,
-        num_classes=10,
-        seed=seed,
-    )
+        labeled_local_idx, unlabeled_local_idx = split_labeled_unlabeled(
+            labels=train_labels,
+            labeled_ratio=labeled_ratio,
+            num_classes=10,
+            seed=seed,
+        )
+        labeled_indices = train_indices[labeled_local_idx]
+        unlabeled_indices = train_indices[unlabeled_local_idx]
 
-    labeled_indices = train_indices[labeled_local_idx]
-    unlabeled_indices = train_indices[unlabeled_local_idx]
+    print(f"Labeled: {len(labeled_indices)}, Unlabeled: {len(unlabeled_indices)}, Val: {len(val_indices)}")
 
     train_labeled_dataset = LabeledDataset(
-        base_dataset=full_train,
-        indices=labeled_indices,
+        base_dataset=full_train, indices=labeled_indices,
     )
-
     train_unlabeled_dataset = UnlabeledDataset(
-        base_dataset=full_train,
-        indices=unlabeled_indices,
+        base_dataset=full_train, indices=unlabeled_indices,
     )
-
     val_dataset = LabeledDataset(
-        base_dataset=full_train,
-        indices=val_indices,
+        base_dataset=full_train, indices=val_indices,
         transform=get_eval_transform(),
     )
 
