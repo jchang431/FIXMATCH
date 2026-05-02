@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+__pycache__/
+*.pyc
+data/
+catdog_clean.*
+catdog_delta.png
+if50_classwise_*.png
+imbalance_perclass.png
+imbalance_splits_km.zip
+imbalance_splits_km/
+graph2.py
+grpah.py
